@@ -1,4 +1,4 @@
-FROM nvidia/cuda:12.4.1-cudnn-devel-ubuntu22.04
+FROM nvcr.io/nvidia/tensorrt:24.04-py3
 
 ENV DEBIAN_FRONTEND=noninteractive \
     PYTHONUNBUFFERED=1 \
@@ -8,7 +8,7 @@ ENV DEBIAN_FRONTEND=noninteractive \
     AVATAR_ENGINE_USE_MEDIAPIPE=true
 
 RUN apt-get update && apt-get install -y --no-install-recommends \
-    python3.10 python3.10-venv python3-pip git ffmpeg curl ca-certificates build-essential \
+    python3.10 python3.10-venv python3-pip python-is-python3 git ffmpeg curl ca-certificates build-essential \
     libgl1 libglib2.0-0 libsm6 libxrender1 libxext6 \
     && rm -rf /var/lib/apt/lists/*
 
@@ -17,6 +17,7 @@ COPY requirements.txt /app/requirements.txt
 RUN python3.10 -m pip install --upgrade pip && python3.10 -m pip install -r /app/requirements.txt
 
 RUN git clone --depth 1 https://github.com/warmshao/FasterLivePortrait.git /opt/FasterLivePortrait
+RUN python3.10 -m pip install -r /opt/FasterLivePortrait/requirements.txt
 
 COPY avatar_engine /app/avatar_engine
 COPY scripts /app/scripts

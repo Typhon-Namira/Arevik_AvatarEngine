@@ -59,6 +59,7 @@ Avatar media is transported through WebRTC `MediaStream`.
 - `FASTERLIVEPORTRAIT_ROOT=/opt/FasterLivePortrait`
 - `CHECKPOINT_DIR=/models/FasterLivePortrait/checkpoints`
 - `AVATAR_ENGINE_MODE=trt`
+- `AVATAR_ENGINE_FORCE_TRT_REBUILD=false`
 - `AVATAR_ENGINE_USE_MEDIAPIPE=true`
 - `AVATAR_ENGINE_CFG=/opt/FasterLivePortrait/configs/trt_mp_infer.yaml`
 - `TURN_URL`
@@ -74,10 +75,32 @@ Avatar media is transported through WebRTC `MediaStream`.
 docker build -t arevik-avatar-engine:latest .
 ```
 
+## First startup model preparation
+
+The container prepares FasterLivePortrait automatically before starting the API.
+
+Cold start:
+
+1. Creates the persistent checkpoint directory at `CHECKPOINT_DIR`.
+2. Links it to `/opt/FasterLivePortrait/checkpoints`, which is the path expected by upstream FasterLivePortrait configs and TensorRT scripts.
+3. Downloads missing FasterLivePortrait checkpoints from Hugging Face.
+4. Builds the human and animal TensorRT engines with upstream `scripts/all_onnx2trt.sh` and `scripts/all_onnx2trt_animal.sh`.
+5. Verifies every required `.trt` engine exists before the API starts.
+
+The image is based on NVIDIA's TensorRT Python container and installs the upstream FasterLivePortrait Python requirements. Startup fails with an explicit error if TensorRT is unavailable.
+
+Warm start:
+
+- Reuses existing checkpoints and TensorRT engines from the persistent volume.
+- Skips TensorRT rebuild when all required engines already exist.
+
+Set `AVATAR_ENGINE_FORCE_TRT_REBUILD=true` only when you intentionally need to regenerate the cached engines.
+
 ## RunPod Pod
 
 ```bash
 docker run --gpus=all -p 8000:8000 \
+  -v arevik-avatar-models:/models/FasterLivePortrait \
   -e AVATAR_ENGINE_API_KEY=... \
   -e AVATAR_IMAGE_URL=https://... \
   -e STUN_URL=stun:stun.l.google.com:19302 \
