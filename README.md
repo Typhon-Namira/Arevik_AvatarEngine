@@ -60,6 +60,7 @@ Avatar media is transported through WebRTC `MediaStream`.
 - `CHECKPOINT_DIR=/models/FasterLivePortrait/checkpoints`
 - `AVATAR_ENGINE_MODE=trt`
 - `AVATAR_ENGINE_FORCE_TRT_REBUILD=false`
+- `AVATAR_ENGINE_ENABLE_ANIMAL=false`
 - `AVATAR_ENGINE_USE_MEDIAPIPE=true`
 - `AVATAR_ENGINE_CFG=/opt/FasterLivePortrait/configs/trt_mp_infer.yaml`
 - `TURN_URL`
@@ -84,11 +85,12 @@ Cold start:
 1. Creates the persistent checkpoint directory at `CHECKPOINT_DIR`.
 2. Links it to `/opt/FasterLivePortrait/checkpoints`, which is the path expected by upstream FasterLivePortrait configs and TensorRT scripts.
 3. Downloads missing FasterLivePortrait checkpoints from Hugging Face.
-4. Builds the human and animal TensorRT engines with upstream `scripts/all_onnx2trt.sh` and `scripts/all_onnx2trt_animal.sh`.
+4. Builds the human TensorRT engines with upstream `scripts/all_onnx2trt.sh`.
 5. Verifies every required `.trt` engine exists before the API starts.
 
 The image is based on NVIDIA's TensorRT Python container and installs the upstream FasterLivePortrait Python requirements. Startup fails with an explicit error if TensorRT is unavailable.
 Checkpoint downloads use the modern Hugging Face `hf download` command installed at image build time; startup does not run `pip install` and does not call the deprecated `huggingface-cli` wrapper.
+Animal checkpoints and TensorRT engines are optional. The default Arevik human avatar deployment does not require them. Set `AVATAR_ENGINE_ENABLE_ANIMAL=true` only if animal inference is intentionally enabled.
 
 Warm start:
 

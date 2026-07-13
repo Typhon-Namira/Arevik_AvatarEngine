@@ -5,6 +5,7 @@ FASTERLIVEPORTRAIT_ROOT="${FASTERLIVEPORTRAIT_ROOT:-/opt/FasterLivePortrait}"
 CHECKPOINT_DIR="${CHECKPOINT_DIR:-/models/FasterLivePortrait/checkpoints}"
 MODE="${AVATAR_ENGINE_MODE:-trt}"
 FORCE_REBUILD="${AVATAR_ENGINE_FORCE_TRT_REBUILD:-false}"
+ENABLE_ANIMAL="${AVATAR_ENGINE_ENABLE_ANIMAL:-false}"
 
 if [[ "$MODE" != "trt" ]]; then
   echo "[AvatarEngine] AVATAR_ENGINE_MODE=$MODE; skipping TensorRT preparation"
@@ -51,6 +52,26 @@ echo "[AvatarEngine] FasterLivePortrait checkpoint path: $EXPECTED_REPO_CHECKPOI
 
 /app/scripts/download_models.sh
 
+if [[ "$ENABLE_ANIMAL" == "true" ]]; then
+  ANIMAL_EXPECTED_DIR="$CHECKPOINT_DIR/liveportrait_animal_onnx"
+  ANIMAL_V11_DIR="$CHECKPOINT_DIR/liveportrait_animal_onnx_v1.1"
+  mkdir -p "$ANIMAL_EXPECTED_DIR"
+
+  for filename in \
+    warping_spade-fix-v1.1.onnx \
+    motion_extractor-v1.1.onnx \
+    appearance_feature_extractor-v1.1.onnx \
+    stitching-v1.1.onnx \
+    stitching_eye-v1.1.onnx \
+    stitching_lip-v1.1.onnx; do
+    source_path="$ANIMAL_V11_DIR/$filename"
+    target_path="$ANIMAL_EXPECTED_DIR/$filename"
+    if [[ -s "$source_path" && ! -e "$target_path" ]]; then
+      ln -s "$source_path" "$target_path"
+    fi
+  done
+fi
+
 REQUIRED_ONNX=(
   "$CHECKPOINT_DIR/liveportrait_onnx/warping_spade-fix.onnx"
   "$CHECKPOINT_DIR/liveportrait_onnx/landmark.onnx"
@@ -62,12 +83,6 @@ REQUIRED_ONNX=(
   "$CHECKPOINT_DIR/liveportrait_onnx/stitching.onnx"
   "$CHECKPOINT_DIR/liveportrait_onnx/stitching_eye.onnx"
   "$CHECKPOINT_DIR/liveportrait_onnx/stitching_lip.onnx"
-  "$CHECKPOINT_DIR/liveportrait_animal_onnx/warping_spade-fix-v1.1.onnx"
-  "$CHECKPOINT_DIR/liveportrait_animal_onnx/motion_extractor-v1.1.onnx"
-  "$CHECKPOINT_DIR/liveportrait_animal_onnx/appearance_feature_extractor-v1.1.onnx"
-  "$CHECKPOINT_DIR/liveportrait_animal_onnx/stitching-v1.1.onnx"
-  "$CHECKPOINT_DIR/liveportrait_animal_onnx/stitching_eye-v1.1.onnx"
-  "$CHECKPOINT_DIR/liveportrait_animal_onnx/stitching_lip-v1.1.onnx"
 )
 
 REQUIRED_TRT=(
@@ -80,13 +95,26 @@ REQUIRED_TRT=(
   "$CHECKPOINT_DIR/liveportrait_onnx/stitching.trt"
   "$CHECKPOINT_DIR/liveportrait_onnx/stitching_eye.trt"
   "$CHECKPOINT_DIR/liveportrait_onnx/stitching_lip.trt"
-  "$CHECKPOINT_DIR/liveportrait_animal_onnx/warping_spade-fix-v1.1.trt"
-  "$CHECKPOINT_DIR/liveportrait_animal_onnx/motion_extractor-v1.1.trt"
-  "$CHECKPOINT_DIR/liveportrait_animal_onnx/appearance_feature_extractor-v1.1.trt"
-  "$CHECKPOINT_DIR/liveportrait_animal_onnx/stitching-v1.1.trt"
-  "$CHECKPOINT_DIR/liveportrait_animal_onnx/stitching_eye-v1.1.trt"
-  "$CHECKPOINT_DIR/liveportrait_animal_onnx/stitching_lip-v1.1.trt"
 )
+
+if [[ "$ENABLE_ANIMAL" == "true" ]]; then
+  REQUIRED_ONNX+=(
+    "$CHECKPOINT_DIR/liveportrait_animal_onnx/warping_spade-fix-v1.1.onnx"
+    "$CHECKPOINT_DIR/liveportrait_animal_onnx/motion_extractor-v1.1.onnx"
+    "$CHECKPOINT_DIR/liveportrait_animal_onnx/appearance_feature_extractor-v1.1.onnx"
+    "$CHECKPOINT_DIR/liveportrait_animal_onnx/stitching-v1.1.onnx"
+    "$CHECKPOINT_DIR/liveportrait_animal_onnx/stitching_eye-v1.1.onnx"
+    "$CHECKPOINT_DIR/liveportrait_animal_onnx/stitching_lip-v1.1.onnx"
+  )
+  REQUIRED_TRT+=(
+    "$CHECKPOINT_DIR/liveportrait_animal_onnx/warping_spade-fix-v1.1.trt"
+    "$CHECKPOINT_DIR/liveportrait_animal_onnx/motion_extractor-v1.1.trt"
+    "$CHECKPOINT_DIR/liveportrait_animal_onnx/appearance_feature_extractor-v1.1.trt"
+    "$CHECKPOINT_DIR/liveportrait_animal_onnx/stitching-v1.1.trt"
+    "$CHECKPOINT_DIR/liveportrait_animal_onnx/stitching_eye-v1.1.trt"
+    "$CHECKPOINT_DIR/liveportrait_animal_onnx/stitching_lip-v1.1.trt"
+  )
+fi
 
 missing_onnx=0
 for path in "${REQUIRED_ONNX[@]}"; do
@@ -124,9 +152,13 @@ if ! bash scripts/all_onnx2trt.sh; then
   exit 1
 fi
 
-if ! bash scripts/all_onnx2trt_animal.sh; then
-  echo "[AvatarEngine] ERROR: animal TensorRT engine generation failed" >&2
-  exit 1
+if [[ "$ENABLE_ANIMAL" == "true" ]]; then
+  if ! bash scripts/all_onnx2trt_animal.sh; then
+    echo "[AvatarEngine] ERROR: animal TensorRT engine generation failed" >&2
+    exit 1
+  fi
+else
+  echo "[AvatarEngine] Animal TensorRT generation disabled; set AVATAR_ENGINE_ENABLE_ANIMAL=true to enable it"
 fi
 
 missing_trt=0

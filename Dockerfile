@@ -5,6 +5,7 @@ ENV DEBIAN_FRONTEND=noninteractive \
     FASTERLIVEPORTRAIT_ROOT=/opt/FasterLivePortrait \
     CHECKPOINT_DIR=/models/FasterLivePortrait/checkpoints \
     AVATAR_ENGINE_MODE=trt \
+    AVATAR_ENGINE_ENABLE_ANIMAL=false \
     AVATAR_ENGINE_USE_MEDIAPIPE=true
 
 RUN apt-get update && apt-get install -y --no-install-recommends \

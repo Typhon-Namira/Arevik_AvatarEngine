@@ -2,6 +2,7 @@
 set -euo pipefail
 
 CHECKPOINT_DIR="${CHECKPOINT_DIR:-/models/FasterLivePortrait/checkpoints}"
+ENABLE_ANIMAL="${AVATAR_ENGINE_ENABLE_ANIMAL:-false}"
 
 mkdir -p "$CHECKPOINT_DIR"
 
@@ -16,16 +17,29 @@ REQUIRED_CHECKPOINTS=(
   "$CHECKPOINT_DIR/liveportrait_onnx/stitching.onnx"
   "$CHECKPOINT_DIR/liveportrait_onnx/stitching_eye.onnx"
   "$CHECKPOINT_DIR/liveportrait_onnx/stitching_lip.onnx"
-  "$CHECKPOINT_DIR/liveportrait_animal_onnx/warping_spade-fix-v1.1.onnx"
-  "$CHECKPOINT_DIR/liveportrait_animal_onnx/motion_extractor-v1.1.onnx"
-  "$CHECKPOINT_DIR/liveportrait_animal_onnx/appearance_feature_extractor-v1.1.onnx"
-  "$CHECKPOINT_DIR/liveportrait_animal_onnx/stitching-v1.1.onnx"
-  "$CHECKPOINT_DIR/liveportrait_animal_onnx/stitching_eye-v1.1.onnx"
-  "$CHECKPOINT_DIR/liveportrait_animal_onnx/stitching_lip-v1.1.onnx"
-  "$CHECKPOINT_DIR/liveportrait_animal_onnx/xpose.pth"
-  "$CHECKPOINT_DIR/liveportrait_animal_onnx/clip_embedding_9.pkl"
-  "$CHECKPOINT_DIR/liveportrait_animal_onnx/clip_embedding_68.pkl"
 )
+
+HF_INCLUDES=(
+  "liveportrait_onnx/*"
+)
+
+if [[ "$ENABLE_ANIMAL" == "true" ]]; then
+  REQUIRED_CHECKPOINTS+=(
+    "$CHECKPOINT_DIR/liveportrait_animal_onnx/xpose.pth"
+    "$CHECKPOINT_DIR/liveportrait_animal_onnx/clip_embedding_9.pkl"
+    "$CHECKPOINT_DIR/liveportrait_animal_onnx/clip_embedding_68.pkl"
+    "$CHECKPOINT_DIR/liveportrait_animal_onnx_v1.1/warping_spade-fix-v1.1.onnx"
+    "$CHECKPOINT_DIR/liveportrait_animal_onnx_v1.1/motion_extractor-v1.1.onnx"
+    "$CHECKPOINT_DIR/liveportrait_animal_onnx_v1.1/appearance_feature_extractor-v1.1.onnx"
+    "$CHECKPOINT_DIR/liveportrait_animal_onnx_v1.1/stitching-v1.1.onnx"
+    "$CHECKPOINT_DIR/liveportrait_animal_onnx_v1.1/stitching_eye-v1.1.onnx"
+    "$CHECKPOINT_DIR/liveportrait_animal_onnx_v1.1/stitching_lip-v1.1.onnx"
+  )
+  HF_INCLUDES+=(
+    "liveportrait_animal_onnx/*"
+    "liveportrait_animal_onnx_v1.1/*"
+  )
+fi
 
 all_present=1
 for path in "${REQUIRED_CHECKPOINTS[@]}"; do
@@ -46,7 +60,7 @@ if ! command -v hf >/dev/null 2>&1; then
   exit 1
 fi
 
-if ! hf download warmshao/FasterLivePortrait --local-dir "$CHECKPOINT_DIR"; then
+if ! hf download warmshao/FasterLivePortrait --local-dir "$CHECKPOINT_DIR" --include "${HF_INCLUDES[@]}"; then
   echo "[AvatarEngine] ERROR: failed to download FasterLivePortrait checkpoints with 'hf download'" >&2
   echo "[AvatarEngine] Check network access, disk space, and HF_TOKEN if the model repository becomes gated." >&2
   exit 1
