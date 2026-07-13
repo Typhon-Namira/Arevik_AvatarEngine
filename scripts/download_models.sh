@@ -41,8 +41,16 @@ if [[ "$all_present" -eq 1 ]]; then
 fi
 
 echo "[AvatarEngine] Downloading FasterLivePortrait checkpoints into $CHECKPOINT_DIR"
-python3.10 -m pip install --quiet --upgrade huggingface_hub
-huggingface-cli download warmshao/FasterLivePortrait --local-dir "$CHECKPOINT_DIR"
+if ! command -v hf >/dev/null 2>&1; then
+  echo "[AvatarEngine] ERROR: Hugging Face CLI 'hf' is not installed in the image" >&2
+  exit 1
+fi
+
+if ! hf download warmshao/FasterLivePortrait --local-dir "$CHECKPOINT_DIR"; then
+  echo "[AvatarEngine] ERROR: failed to download FasterLivePortrait checkpoints with 'hf download'" >&2
+  echo "[AvatarEngine] Check network access, disk space, and HF_TOKEN if the model repository becomes gated." >&2
+  exit 1
+fi
 
 missing=0
 for path in "${REQUIRED_CHECKPOINTS[@]}"; do

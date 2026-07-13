@@ -14,7 +14,9 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
 
 WORKDIR /app
 COPY requirements.txt /app/requirements.txt
-RUN python3.10 -m pip install --upgrade pip && python3.10 -m pip install -r /app/requirements.txt
+RUN python3.10 -m pip install --upgrade pip \
+    && python3.10 -m pip install -r /app/requirements.txt \
+    && python3.10 -m pip install "huggingface_hub[cli]>=0.24.0"
 
 RUN git clone --depth 1 https://github.com/warmshao/FasterLivePortrait.git /opt/FasterLivePortrait
 RUN python3.10 -m pip install -r /opt/FasterLivePortrait/requirements.txt

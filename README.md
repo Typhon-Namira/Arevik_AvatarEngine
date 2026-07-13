@@ -88,6 +88,7 @@ Cold start:
 5. Verifies every required `.trt` engine exists before the API starts.
 
 The image is based on NVIDIA's TensorRT Python container and installs the upstream FasterLivePortrait Python requirements. Startup fails with an explicit error if TensorRT is unavailable.
+Checkpoint downloads use the modern Hugging Face `hf download` command installed at image build time; startup does not run `pip install` and does not call the deprecated `huggingface-cli` wrapper.
 
 Warm start:
 
