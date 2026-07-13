@@ -1,5 +1,6 @@
 import base64
 import json
+import logging
 import time
 from typing import Any
 
@@ -14,6 +15,7 @@ from .session_manager import AvatarSessionManager
 from .webrtc import AvatarVideoTrack, parse_candidate, rtc_configuration
 
 configure_logging()
+logger = logging.getLogger(__name__)
 
 settings = get_settings()
 adapter = FasterLivePortraitAdapter(settings)
@@ -139,6 +141,20 @@ async def signaling(websocket: WebSocket, session_id: str) -> None:
     session.peer = pc
     pc.addTrack(AvatarVideoTrack(session_id, adapter, fps=settings.target_fps))
 
+    @pc.on("iceconnectionstatechange")
+    async def on_iceconnectionstatechange():
+        logger.info(
+            "avatar.webrtc.ice_connection_state",
+            extra={"session_id": session_id, "state": pc.iceConnectionState},
+        )
+
+    @pc.on("connectionstatechange")
+    async def on_connectionstatechange():
+        logger.info(
+            "avatar.webrtc.peer_connection_state",
+            extra={"session_id": session_id, "state": pc.connectionState},
+        )
+
     @pc.on("icecandidate")
     async def on_icecandidate(candidate):
         if candidate is not None:
@@ -148,10 +164,12 @@ async def signaling(websocket: WebSocket, session_id: str) -> None:
         while True:
             payload = await websocket.receive_json()
             if payload.get("type") == "offer":
+                logger.info("avatar.webrtc.offer_received", extra={"session_id": session_id})
                 await pc.setRemoteDescription(RTCSessionDescription(sdp=payload["sdp"], type="offer"))
                 answer = await pc.createAnswer()
                 await pc.setLocalDescription(answer)
                 await websocket.send_json({"type": "answer", "sdp": pc.localDescription.sdp})
+                logger.info("avatar.webrtc.answer_sent", extra={"session_id": session_id})
             elif payload.get("type") == "ice-candidate":
                 candidate = parse_candidate(payload)
                 if candidate:

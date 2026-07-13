@@ -1,18 +1,17 @@
-import asyncio
-import fractions
+import logging
 import time
 from typing import Any
 
 import av
-from aiortc import MediaStreamTrack, RTCPeerConnection, RTCSessionDescription, RTCConfiguration, RTCIceServer
+from aiortc import VideoStreamTrack, RTCPeerConnection, RTCSessionDescription, RTCConfiguration, RTCIceServer
 from aiortc.sdp import candidate_from_sdp
 
 from .faster_liveportrait_adapter import FasterLivePortraitAdapter
 
+logger = logging.getLogger(__name__)
 
-class AvatarVideoTrack(MediaStreamTrack):
-    kind = "video"
 
+class AvatarVideoTrack(VideoStreamTrack):
     def __init__(self, session_id: str, adapter: FasterLivePortraitAdapter, fps: int = 25) -> None:
         super().__init__()
         self.session_id = session_id
@@ -20,13 +19,26 @@ class AvatarVideoTrack(MediaStreamTrack):
         self.fps = fps
         self.counter = 0
         self.start = time.time()
+        self._last_log_at = 0.0
 
     async def recv(self) -> av.VideoFrame:
-        await asyncio.sleep(1 / max(1, self.fps))
+        pts, time_base = await self.next_timestamp()
         frame_array = self.adapter.next_frame(self.session_id)
-        frame = av.VideoFrame.from_ndarray(frame_array, format="rgb24")
-        frame.pts = self.counter
-        frame.time_base = fractions.Fraction(1, self.fps)
+        if self.counter == 0 or time.time() - self._last_log_at > 5:
+            logger.info(
+                "avatar.webrtc.frame_generated",
+                extra={
+                    "session_id": self.session_id,
+                    "frame": self.counter,
+                    "shape": getattr(frame_array, "shape", None),
+                    "min": int(frame_array.min()) if frame_array.size else None,
+                    "max": int(frame_array.max()) if frame_array.size else None,
+                },
+            )
+            self._last_log_at = time.time()
+        frame = av.VideoFrame.from_ndarray(frame_array, format="rgb24").reformat(format="yuv420p")
+        frame.pts = pts
+        frame.time_base = time_base
         self.counter += 1
         return frame
 
