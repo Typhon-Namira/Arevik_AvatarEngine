@@ -1,9 +1,11 @@
 import base64
+import asyncio
 import json
 import logging
 import time
 from typing import Any
 
+import cv2
 from aiortc import RTCPeerConnection, RTCSessionDescription
 from fastapi import Depends, FastAPI, Header, HTTPException, WebSocket, WebSocketDisconnect
 from pydantic import BaseModel
@@ -140,6 +142,35 @@ async def signaling(websocket: WebSocket, session_id: str) -> None:
     pc = RTCPeerConnection(configuration=rtc_configuration(session.ice_servers))
     session.peer = pc
     pc.addTrack(AvatarVideoTrack(session_id, adapter, fps=settings.target_fps))
+    frame_stream_task: asyncio.Task | None = None
+
+    async def stream_frames_over_websocket(fps: int = 12) -> None:
+        frame_interval = 1.0 / max(1, min(fps, settings.target_fps))
+        frame_index = 0
+        logger.info("avatar.websocket_frame_stream.started", extra={"session_id": session_id, "fps": fps})
+        try:
+            while True:
+                frame = adapter.next_frame(session_id)
+                ok, encoded = cv2.imencode(".jpg", frame[:, :, ::-1], [int(cv2.IMWRITE_JPEG_QUALITY), 78])
+                if ok:
+                    await websocket.send_text(json.dumps({
+                        "type": "video-frame",
+                        "format": "jpeg",
+                        "data": base64.b64encode(encoded.tobytes()).decode("ascii"),
+                        "width": int(frame.shape[1]),
+                        "height": int(frame.shape[0]),
+                        "index": frame_index,
+                        "timestamp": time.time(),
+                    }))
+                    if frame_index == 0 or frame_index % (fps * 5) == 0:
+                        logger.info("avatar.websocket_frame_stream.frame_sent", extra={"session_id": session_id, "frame": frame_index})
+                    frame_index += 1
+                await asyncio.sleep(frame_interval)
+        except asyncio.CancelledError:
+            logger.info("avatar.websocket_frame_stream.cancelled", extra={"session_id": session_id, "frames": frame_index})
+            raise
+        except Exception as exc:
+            logger.warning("avatar.websocket_frame_stream.error session_id=%s error_type=%s error=%s", session_id, type(exc).__name__, str(exc))
 
     @pc.on("iceconnectionstatechange")
     async def on_iceconnectionstatechange():
@@ -174,6 +205,15 @@ async def signaling(websocket: WebSocket, session_id: str) -> None:
                 candidate = parse_candidate(payload)
                 if candidate:
                     await pc.addIceCandidate(candidate)
+            elif payload.get("type") == "start-frame-stream":
+                if frame_stream_task is None or frame_stream_task.done():
+                    requested_fps = int(payload.get("fps") or 12)
+                    frame_stream_task = asyncio.create_task(stream_frames_over_websocket(requested_fps))
+                await websocket.send_json({"type": "frame-stream-started", "session_id": session_id})
+            elif payload.get("type") == "stop-frame-stream":
+                if frame_stream_task and not frame_stream_task.done():
+                    frame_stream_task.cancel()
+                await websocket.send_json({"type": "frame-stream-stopped", "session_id": session_id})
             elif payload.get("type") == "ping":
                 await websocket.send_json({"type": "pong", "session_id": session_id, "timestamp": time.time()})
             else:
@@ -181,4 +221,6 @@ async def signaling(websocket: WebSocket, session_id: str) -> None:
     except WebSocketDisconnect:
         return
     finally:
+        if frame_stream_task and not frame_stream_task.done():
+            frame_stream_task.cancel()
         await pc.close()
