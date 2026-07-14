@@ -107,6 +107,7 @@ async def start_session(payload: SessionStartRequest, _: None = Depends(authoriz
         "session_id": session.session_id,
         "status": "started",
         "request_id": payload.request_id,
+        "avatar_url": session.avatar_image_url,
         "signaling_url": f"/avatar/signaling/{session.session_id}",
         "ice_servers": ice_servers,
     }
