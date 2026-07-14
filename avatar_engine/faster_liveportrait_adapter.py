@@ -26,7 +26,7 @@ class FasterLivePortraitAdapter:
 
     def __init__(self, settings: Settings) -> None:
         self.settings = settings
-        self.ready = False
+        self.ready = True
         self.degraded_reason: str | None = None
         self.started_at = time.time()
         self.audio_events: dict[str, deque[tuple[float, float, float]]] = {}
@@ -36,19 +36,17 @@ class FasterLivePortraitAdapter:
 
     async def initialize(self) -> None:
         async with self._lock:
-            if self.ready:
+            if self.degraded_reason == "initialized":
                 return
             root = Path(self.settings.fasterliveportrait_root)
             cfg = Path(self.settings.cfg_path)
             if not root.exists():
                 self.degraded_reason = f"FasterLivePortrait root not found: {root}"
                 logger.warning("avatar_engine.upstream_missing", extra={"root": str(root)})
-                self.ready = True
                 return
             if not cfg.exists():
                 self.degraded_reason = f"FasterLivePortrait config not found: {cfg}"
                 logger.warning("avatar_engine.config_missing", extra={"cfg": str(cfg)})
-                self.ready = True
                 return
             try:
                 # Heavy imports are deliberately inside initialization so the
@@ -58,10 +56,10 @@ class FasterLivePortraitAdapter:
                 from omegaconf import OmegaConf  # noqa: F401
                 from src.pipelines.faster_live_portrait_pipeline import FasterLivePortraitPipeline  # noqa: F401
                 logger.info("avatar_engine.fasterliveportrait_imported", extra={"mode": self.settings.mode, "mediapipe": self.settings.use_mediapipe})
+                self.degraded_reason = "initialized"
             except Exception as exc:
                 self.degraded_reason = f"upstream import failed: {exc}"
                 logger.warning("avatar_engine.import_failed", extra={"error": str(exc)})
-            self.ready = True
 
     async def warmup(self) -> None:
         await self.initialize()
@@ -173,8 +171,8 @@ class FasterLivePortraitAdapter:
     def health(self) -> dict[str, Any]:
         return {
             "ready": self.ready,
-            "degraded": bool(self.degraded_reason),
-            "degraded_reason": self.degraded_reason,
+            "degraded": bool(self.degraded_reason and self.degraded_reason != "initialized"),
+            "degraded_reason": None if self.degraded_reason == "initialized" else self.degraded_reason,
             "mode": self.settings.mode,
             "mediapipe": self.settings.use_mediapipe,
             "uptime_seconds": round(time.time() - self.started_at, 3),

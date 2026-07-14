@@ -63,7 +63,7 @@ def default_ice_servers() -> list[dict[str, Any]]:
 
 @app.on_event("startup")
 async def startup() -> None:
-    await adapter.warmup()
+    asyncio.create_task(adapter.warmup())
 
 
 @app.on_event("shutdown")
@@ -90,6 +90,23 @@ async def health() -> dict[str, Any]:
     }
 
 
+@app.get("/")
+async def root() -> dict[str, Any]:
+    runtime = adapter.health()
+    return {
+        "service": settings.service_name,
+        "status": "ready",
+        "ready": True,
+        "runtime": runtime,
+        "message": "Arevik AvatarEngine HTTP service is running",
+    }
+
+
+@app.get("/ready")
+async def ready() -> dict[str, Any]:
+    return {"status": "ready", "ready": True}
+
+
 @app.get("/metrics")
 async def metrics(_: None = Depends(authorize)) -> dict[str, Any]:
     return {"runtime": adapter.health(), "sessions": sessions.metrics()}
@@ -102,7 +119,7 @@ async def start_session(payload: SessionStartRequest, _: None = Depends(authoriz
         raise HTTPException(status_code=400, detail="avatar_image_url or AVATAR_IMAGE_URL is required")
     ice_servers = payload.ice_servers or default_ice_servers()
     session = sessions.start(payload.session_id, image_url, ice_servers)
-    await adapter.set_avatar_image(session.session_id, image_url)
+    asyncio.create_task(adapter.set_avatar_image(session.session_id, image_url))
     logger.info(
         "avatar.session.created",
         extra={"session_id": session.session_id, "avatar_url_configured": bool(session.avatar_image_url), "ice_servers": len(ice_servers)},
