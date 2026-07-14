@@ -82,7 +82,7 @@ async def health() -> dict[str, Any]:
         "capabilities": {
             "webrtc": True,
             "websocket_signaling": True,
-            "websocket_frame_transport": False,
+            "websocket_frame_transport": True,
             "generated_mp4": False,
             "mediapipe": settings.use_mediapipe,
             "tensorrt": settings.mode.lower() == "trt",
@@ -102,6 +102,11 @@ async def start_session(payload: SessionStartRequest, _: None = Depends(authoriz
         raise HTTPException(status_code=400, detail="avatar_image_url or AVATAR_IMAGE_URL is required")
     ice_servers = payload.ice_servers or default_ice_servers()
     session = sessions.start(payload.session_id, image_url, ice_servers)
+    await adapter.set_avatar_image(session.session_id, image_url)
+    logger.info(
+        "avatar.session.created",
+        extra={"session_id": session.session_id, "avatar_url_configured": bool(session.avatar_image_url), "ice_servers": len(ice_servers)},
+    )
     return {
         "success": True,
         "session_id": session.session_id,
@@ -125,10 +130,20 @@ async def audio(payload: AudioRequest, _: None = Depends(authorize)) -> dict[str
     if not session:
         raise HTTPException(status_code=404, detail="session not found")
     audio_bytes = base64.b64decode(payload.audio_base64)
+    logger.info(
+        "avatar.audio.received",
+        extra={"session_id": payload.session_id, "request_id": payload.request_id, "audio_bytes": len(audio_bytes), "audio_format": payload.audio_format},
+    )
     adapter.ingest_audio(payload.session_id, audio_bytes)
     session.audio_segments += 1
     session.last_audio_at = time.time()
-    return {"success": True, "session_id": payload.session_id, "status": "accepted", "request_id": payload.request_id}
+    return {
+        "success": True,
+        "session_id": payload.session_id,
+        "avatar_url": session.avatar_image_url,
+        "status": "accepted",
+        "request_id": payload.request_id,
+    }
 
 
 @app.websocket("/avatar/signaling/{session_id}")
@@ -164,7 +179,10 @@ async def signaling(websocket: WebSocket, session_id: str) -> None:
                         "timestamp": time.time(),
                     }))
                     if frame_index == 0 or frame_index % (fps * 5) == 0:
-                        logger.info("avatar.websocket_frame_stream.frame_sent", extra={"session_id": session_id, "frame": frame_index})
+                        logger.info(
+                            "avatar.websocket_frame_stream.frame_sent",
+                            extra={"session_id": session_id, "frame": frame_index, "width": int(frame.shape[1]), "height": int(frame.shape[0])},
+                        )
                     frame_index += 1
                 await asyncio.sleep(frame_interval)
         except asyncio.CancelledError:
